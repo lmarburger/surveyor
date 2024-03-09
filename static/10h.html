@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cable Modem Metrics</title>
+    <style>
+        .trigger {
+            height: 1px;
+            width: 1px;
+            visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+    <a href="15m.html">15 Min</a>
+    <a href="index.html">1 Hour</a>
+    10 Hour
+    <a href="30h.html">30 Hour</a>
+    <a href="10d.html">10 Day</a>
+
+    <!-- hack to generate smokeping graphs -->
+    <img class="trigger" src="/smokeping/?target=ping.Upstream" />
+    <img class="trigger" src="/smokeping/?target=ping.Modem" />
+    <br/>
+
+    <img src="graphs/snratio-10h-900x150.png" alt="S/N Ratio" />
+    <img src="graphs/powerlevel-10h-900x150.png" alt="Power Level" />
+    <img src="graphs/unerrored-10h-900x150.png" alt="Unerrored" />
+    <img src="graphs/correctable-10h-900x150.png" alt="Correctable" />
+    <img src="graphs/uncorrectable-10h-900x150.png" alt="Uncorrectable" />
+    <img src="/smokeping/cache/ping/Upstream_last_36000.png" alt="Upstream Smokeping" />
+    <img src="/smokeping/cache/ping/Modem_last_36000.png" alt="Modem Smokeping" />
+    <img src="graphs/frequency-10h-900x150.png" alt="Channel Frequencies" />
+</body>
+</html>
