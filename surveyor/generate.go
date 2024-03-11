@@ -18,6 +18,24 @@ const (
 	Breakout
 )
 
+var colors = []string{
+	"#E51616",
+	"#E5B116",
+	"#7EE516",
+	"#16E54A",
+	"#16E5E5",
+	"#164AE5",
+	"#7E16E5",
+	"#E516B1",
+}
+
+var percentileColors = map[string]string{
+	"100p":   "#CEDCE8",
+	"75p":    "#8EACC9",
+	"50p":    "#4E7DA9",
+	"median": "#0E4D8A",
+}
+
 var allGraphs = map[string]struct {
 	title, label string
 	graphType    int
@@ -71,13 +89,25 @@ func dataSources(name string, sourceType string, heartbeat int, min, max string)
 func graphMedian(ctx context.Context, rrdPath, def string, graph GraphDetails) error {
 	args := graphCommand(graph)
 	args = append(args, dataDefinitions(rrdPath, def, totalChannels)...)
+	list := dataList("data", 8)
 	args = append(args,
-		aggregation("min", "SMIN", totalChannels),
-		aggregation("max", "SMAX", totalChannels),
-		aggregation("med", "MEDIAN", totalChannels),
-		"AREA:max#CEDCE8:Min / Max",
-		"AREA:min#FFFFFF",
-		"LINE2:med#0E4D8A:Median",
+		fmt.Sprintf("CDEF:median=%s,8,MEDIAN", list),
+		fmt.Sprintf("CDEF:min100p=%s,8,SMIN", list),
+		fmt.Sprintf("CDEF:max100p=%s,8,SMAX", list),
+		fmt.Sprintf("CDEF:min75p=%s,8,SORT,8,REV,POP,7,SMIN", list),
+		fmt.Sprintf("CDEF:max75p=%s,8,SORT,POP,7,SMAX", list),
+		fmt.Sprintf("CDEF:min50p=%s,8,SORT,8,REV,POP,POP,6,SMIN", list),
+		fmt.Sprintf("CDEF:max50p=%s,8,SORT,POP,POP,6,SMAX", list),
+		"CDEF:range100p=max100p,min100p,-",
+		"CDEF:range75p=max75p,min75p,-",
+		"CDEF:range50p=max50p,min50p,-",
+		"LINE:min100p",
+		fmt.Sprintf("AREA:range100p%s:100p:STACK", percentileColors["100p"]),
+		"LINE:min75p",
+		fmt.Sprintf("AREA:range75p%s:75p:STACK", percentileColors["75p"]),
+		"LINE:min50p",
+		fmt.Sprintf("AREA:range50p%s:50p:STACK", percentileColors["50p"]),
+		fmt.Sprintf("LINE2:median%s:Median", percentileColors["median"]),
 	)
 
 	var stderr bytes.Buffer
@@ -145,23 +175,12 @@ func dataDefinitions(rrdPath, prefix string, size int) []string {
 	return defs
 }
 
-func aggregation(name, agg string, size int) string {
-	dataNames := make([]string, 0, size)
+func dataList(name string, size int) string {
+	list := make([]string, 0, size)
 	for i := 0; i < size; i++ {
-		dataNames = append(dataNames, fmt.Sprintf("data%d", i))
+		list = append(list, fmt.Sprintf("%s%d", name, i))
 	}
-	return fmt.Sprintf("CDEF:%s=%s,%d,%s", name, strings.Join(dataNames, ","), len(dataNames), agg)
-}
-
-var colors = []string{
-	"#E51616",
-	"#E5B116",
-	"#7EE516",
-	"#16E54A",
-	"#16E5E5",
-	"#164AE5",
-	"#7E16E5",
-	"#E516B1",
+	return strings.Join(list, ",")
 }
 
 func lines(size int) []string {

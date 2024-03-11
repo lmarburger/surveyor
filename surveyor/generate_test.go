@@ -117,10 +117,10 @@ func TestDataDefinitions(t *testing.T) {
 	})
 }
 
-func TestAggregation(t *testing.T) {
-	t.Run("create CDEF with given details", func(t *testing.T) {
-		defs := aggregation("test", "SMIN", 4)
-		expected := "CDEF:test=data0,data1,data2,data3,4,SMIN"
+func TestDataList(t *testing.T) {
+	t.Run("returns list of data items", func(t *testing.T) {
+		defs := dataList("data", 4)
+		expected := "data0,data1,data2,data3"
 		assert.Equal(t, expected, defs)
 	})
 }

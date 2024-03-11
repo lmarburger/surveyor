@@ -113,7 +113,6 @@ func WriteRRD(ctx context.Context, path string, start time.Time, data SignalData
 
 	var stderr bytes.Buffer
 	args := []string{"update", path, x}
-	fmt.Println(args)
 	cmd := exec.CommandContext(ctx, "rrdtool", args...)
 	cmd.Stderr = &stderr
 
