@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"golang.org/x/exp/maps"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -121,4 +123,29 @@ func WriteRRD(ctx context.Context, path string, start time.Time, data SignalData
 		return fmt.Errorf("error updating database: %w\n%v\n%v", err, args, stderr.String())
 	}
 	return nil
+}
+
+func flattenChannelData(data SignalData) []string {
+	sortedChannelIDs := maps.Keys(data)
+	slices.Sort(sortedChannelIDs)
+
+	flattened := make([]string, totalChannels*6)
+	for i, channelID := range sortedChannelIDs {
+		values := signalDatumToSlice(data[channelID])
+		for j := range len(values) {
+			next := j * totalChannels
+			flattened[i+next] = values[j]
+		}
+	}
+
+	lenChannels := len(sortedChannelIDs)
+	for i := range totalChannels - lenChannels {
+		base := i + lenChannels
+		for j := range 6 {
+			next := j * totalChannels
+			flattened[base+next] = "U"
+		}
+	}
+
+	return flattened
 }

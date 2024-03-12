@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"golang.org/x/exp/maps"
 	"os/exec"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -198,23 +196,6 @@ func stack(size int) []string {
 		areas = append(areas, fmt.Sprintf("AREA:data%d%s:%d:STACK", i, colors[i%8], i+1))
 	}
 	return areas
-}
-
-func flattenChannelData(data SignalData) []string {
-	channelsCount := len(data)
-	sortedChannelIDs := maps.Keys(data)
-	slices.Sort(sortedChannelIDs)
-
-	flattened := make([]string, channelsCount*6)
-	for i, channelID := range sortedChannelIDs {
-		values := signalDatumToSlice(data[channelID])
-		for j := range len(values) {
-			next := j * channelsCount
-			flattened[i+next] = values[j]
-		}
-	}
-
-	return flattened
 }
 
 func signalDatumToSlice(datum SignalDatum) []string {

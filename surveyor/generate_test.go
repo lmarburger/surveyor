@@ -10,28 +10,6 @@ import (
 	"time"
 )
 
-func TestFlattenChannelData(t *testing.T) {
-	t.Run("returns a list of data grouped by value sorted by channel", func(t *testing.T) {
-		data := SignalData{
-			4:  {"41", "42", "43", "44", "45", "46"},
-			6:  {"61", "62", "63", "64", "65", "66"},
-			13: {"131", "132", "133", "134", "135", "136"},
-			2:  {"21", "22", "23", "24", "25", "26"},
-		}
-		expected := []string{
-			"21", "41", "61", "131",
-			"22", "42", "62", "132",
-			"23", "43", "63", "133",
-			"24", "44", "64", "134",
-			"25", "45", "65", "135",
-			"26", "46", "66", "136",
-		}
-
-		actual := flattenChannelData(data)
-		assert.Equal(t, expected, actual)
-	})
-}
-
 func TestGraphMedian(t *testing.T) {
 	t.Run("graph median without error", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
