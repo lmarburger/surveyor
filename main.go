@@ -27,16 +27,18 @@ func main() {
 	scrapeTicker := time.NewTicker(step)
 	defer scrapeTicker.Stop()
 
-	rrdErr := surveyor.CreateRRD(ctx, f.dataPath, step, step*2)
-	if rrdErr != nil {
-		fmt.Println(rrdErr)
+	if err := surveyor.CreateRRD(ctx, f.dataPath, step, step*2); err != nil {
+		fmt.Println(err)
 		os.Exit(1)
 	}
 
 	server := surveyor.StartGraphServer(f.addr, f.urlBase, f.dataPath)
+	client := surveyor.NewHNAPClient()
 
 loop:
 	for {
+		run(ctx, client, f.dataPath)
+
 		select {
 		case <-ctx.Done():
 			break loop
@@ -44,24 +46,24 @@ loop:
 			fmt.Println("received signal, exiting")
 			cancel()
 		case <-scrapeTicker.C:
-			run(ctx, f.dataPath)
+			continue
 		}
 	}
 
-	err := server.Shutdown()
-	if err != nil {
+	if err := server.Shutdown(); err != nil {
 		log.Fatalf("error waiting for server to shut down: %v", err)
 	}
 }
 
-func run(ctx context.Context, filename string) {
-	scrapeCtx, scrapeCancel := context.WithTimeout(ctx, time.Second*2)
+func run(ctx context.Context, client *surveyor.HNAPClient, filename string) {
+	// It takes just shy of 3s to get signal data from the modem.
+	scrapeCtx, scrapeCancel := context.WithTimeout(ctx, time.Second*5)
 	defer scrapeCancel()
 
 	start := time.Now()
-	signalData, scrapeErr := surveyor.Scrape(scrapeCtx)
-	if scrapeErr != nil {
-		log.Printf("error scraping: %v", scrapeErr)
+	signalData, err := client.GetSignalData(scrapeCtx)
+	if err != nil {
+		log.Printf("error fetching signal data: %v", err)
 		return
 	}
 

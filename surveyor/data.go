@@ -13,10 +13,11 @@ import (
 	"time"
 )
 
-var totalChannels = 8
+var totalChannels = 16
+var totalDataSources = 5
 
 type SignalDatum struct {
-	Frequency, SNRatio, PowerLevel, Unerrored, Correctable, Uncorrectable string
+	Frequency, SNRatio, PowerLevel, Correctable, Uncorrectable string
 }
 
 type SignalData map[int]SignalDatum
@@ -55,7 +56,7 @@ type GraphDetails struct {
 // RRA:AVERAGE:0.5:360:480  -  10d @ 30m
 // RRA:AVERAGE:0.5:720:9600 - 400d @  1h
 //
-// That's 11,160 data points. With 6 data sources and storing avg, min, and max, that creates a 12MB database. 💯
+// That's 11,160 data points. With 5 data sources and storing avg, min, and max, that creates a 21MB database. 💯
 
 func CreateRRD(ctx context.Context, path string, step, heartbeat time.Duration) error {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -68,12 +69,15 @@ func CreateRRD(ctx context.Context, path string, step, heartbeat time.Duration) 
 	var stderr bytes.Buffer
 	args := []string{"create", path, "--step", strconv.Itoa(stepSeconds)}
 
+	startLength := len(args)
 	args = append(args, dataSources("frequency", "GAUGE", heartbeatSeconds, "U", "U")...)
 	args = append(args, dataSources("snratio", "GAUGE", heartbeatSeconds, "U", "U")...)
 	args = append(args, dataSources("powerlevel", "GAUGE", heartbeatSeconds, "U", "U")...)
-	args = append(args, dataSources("unerrored", "COUNTER", heartbeatSeconds, "0", "U")...)
 	args = append(args, dataSources("correctable", "COUNTER", heartbeatSeconds, "0", "U")...)
 	args = append(args, dataSources("uncorrectable", "COUNTER", heartbeatSeconds, "0", "U")...)
+	if err := assertExpectedDataSources(len(args) - startLength); err != nil {
+		return err
+	}
 
 	args = append(args, "RRA:AVERAGE:0.5:1:180")
 	args = append(args, "RRA:MIN:0.5:1:180")
@@ -129,7 +133,7 @@ func flattenChannelData(data SignalData) []string {
 	sortedChannelIDs := maps.Keys(data)
 	slices.Sort(sortedChannelIDs)
 
-	flattened := make([]string, totalChannels*6)
+	flattened := make([]string, totalChannels*totalDataSources)
 	for i, channelID := range sortedChannelIDs {
 		values := signalDatumToSlice(data[channelID])
 		for j := range len(values) {
@@ -138,14 +142,14 @@ func flattenChannelData(data SignalData) []string {
 		}
 	}
 
-	lenChannels := len(sortedChannelIDs)
-	for i := range totalChannels - lenChannels {
-		base := i + lenChannels
-		for j := range 6 {
-			next := j * totalChannels
-			flattened[base+next] = "U"
-		}
+	return flattened
+}
+
+func assertExpectedDataSources(length int) error {
+	expected := totalChannels * totalDataSources
+	if expected == length {
+		return nil
 	}
 
-	return flattened
+	return fmt.Errorf("unexpected number of data sources, expected %d got %d\n", expected, length)
 }
