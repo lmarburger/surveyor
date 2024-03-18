@@ -111,14 +111,15 @@ func CreateRRD(ctx context.Context, path string, step, heartbeat time.Duration) 
 }
 
 func WriteRRD(ctx context.Context, path string, start time.Time, data SignalData) error {
-	z := flattenChannelData(data)
-	y := make([]string, 0, len(z)+1)
-	y = append(y, strconv.FormatInt(start.Unix(), 10))
-	y = append(y, z...)
-	x := strings.Join(y, ":")
+	flattened := flattenChannelData(data)
+	parts := make([]string, 0, len(flattened)+1)
+	parts = append(parts, strconv.FormatInt(start.Unix(), 10))
+	parts = append(parts, flattened...)
+	joined := strings.Join(parts, ":")
+	fmt.Printf("write: %v\n", joined)
 
 	var stderr bytes.Buffer
-	args := []string{"update", path, x}
+	args := []string{"update", path, joined}
 	cmd := exec.CommandContext(ctx, "rrdtool", args...)
 	cmd.Stderr = &stderr
 
