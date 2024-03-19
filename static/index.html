@@ -23,13 +23,15 @@
     <!-- hack to generate smokeping graphs -->
     <img class="trigger" src="/smokeping/?target=ping.Upstream" />
     <img class="trigger" src="/smokeping/?target=ping.Modem" />
+    <img class="trigger" src="/smokeping/?target=tcp.Cloudflare" />
     <br/>
 
     <img src="graphs/snratio-1h-900x150.png" alt="S/N Ratio" />
+    <img src="/smokeping/cache/ping/Upstream_last_3600.png" alt="Upstream ping" />
+    <img src="/smokeping/cache/tcp/Cloudflare_last_3600.png" alt="Cloudflare tcpping" />
+    <img src="/smokeping/cache/ping/Modem_last_3600.png" alt="Modem ping" />
     <img src="graphs/correctable-1h-900x150.png" alt="Correctable" />
     <img src="graphs/uncorrectable-1h-900x150.png" alt="Uncorrectable" />
-    <img src="/smokeping/cache/ping/Upstream_last_3600.png" alt="Upstream Smokeping" />
-    <img src="/smokeping/cache/ping/Modem_last_3600.png" alt="Modem Smokeping" />
     <img src="graphs/powerlevel-1h-900x150.png" alt="Power Level" />
     <img src="graphs/frequency-1h-900x150.png" alt="Channel Frequencies" />
 </body>
