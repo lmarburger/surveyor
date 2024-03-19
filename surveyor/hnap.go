@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,8 @@ const (
 	loginAction          = `"http://purenetworks.com/HNAP1/Login"`
 	getChannelInfoAction = `"http://purenetworks.com/HNAP1/GetMultipleHNAPs"`
 )
+
+var notFound = errors.New("not found")
 
 type LoginRequest struct {
 	Login LoginRequestBody `json:"Login"`
@@ -138,15 +141,15 @@ func NewHNAPClient() *HNAPClient {
 }
 
 func (client *HNAPClient) GetSignalData(context.Context) (SignalData, error) {
-	if client.credentials.Empty() {
-		fmt.Println("GetSignalData: credentials empty")
-		err := client.Login()
-		if err != nil {
-			return nil, err
-		}
+	var resp GetCustomerStatusDownstreamChannelInfoResponse
+	var err error
+
+	resp, err = client.attemptGetSignalData()
+	if errors.Is(err, notFound) {
+		client.credentials = Credentials{}
+		resp, err = client.attemptGetSignalData()
 	}
 
-	resp, err := client.RequestStreamInfos()
 	if err != nil {
 		return nil, err
 	}
@@ -156,6 +159,17 @@ func (client *HNAPClient) GetSignalData(context.Context) (SignalData, error) {
 	}
 
 	return ChannelInfosToSignalData(resp.Downstream.Channels)
+}
+
+func (client *HNAPClient) attemptGetSignalData() (GetCustomerStatusDownstreamChannelInfoResponse, error) {
+	if client.credentials.Empty() {
+		fmt.Println("credentials empty, logging in")
+		if err := client.Login(); err != nil {
+			return GetCustomerStatusDownstreamChannelInfoResponse{}, err
+		}
+	}
+
+	return client.RequestStreamInfos()
 }
 
 func (client *HNAPClient) Login() error {
@@ -214,7 +228,6 @@ func (client *HNAPClient) RequestStreamInfos() (GetCustomerStatusDownstreamChann
 
 func (client *HNAPClient) MakeRequest(request any, action string) ([]byte, error) {
 	payloadBytes, err := json.Marshal(request)
-	fmt.Printf("request: %v\n", string(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling json: %w", err)
 	}
@@ -235,10 +248,10 @@ func (client *HNAPClient) MakeRequest(request any, action string) ([]byte, error
 	}
 	defer ClosePrintErr(resp.Body)
 
+	if resp.StatusCode == 404 {
+		return nil, notFound
+	}
 	if resp.StatusCode != 200 {
-		if resp.StatusCode == 404 {
-			// return a not found error to catch upstream and retry login
-		}
 		return nil, fmt.Errorf("received http error status=%d: %s", resp.StatusCode, resp.Status)
 	}
 
