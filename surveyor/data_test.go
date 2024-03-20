@@ -52,6 +52,24 @@ func TestWriteRRD(t *testing.T) {
 		err := WriteRRD(ctx, "test.rrd", time.Now().Add(time.Second*2), testSignalData)
 		assert.Nilf(t, err, "error writing to rrd: %v", err)
 	})
+
+	t.Run("write to rrd without error with fewer than expected channels", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		useTempDir(t)
+		createTestRRD(t, ctx)
+
+		data := SignalData{
+			7:  {"71", "72", "73", "74", "75"},
+			4:  {"41", "42", "43", "44", "45"},
+			5:  {"51", "52", "53", "54", "55"},
+			11: {"111", "112", "113", "114", "115"},
+			13: {"131", "132", "133", "134", "135"},
+		}
+
+		err := WriteRRD(ctx, "test.rrd", time.Now().Add(time.Second*2), data)
+		assert.Nilf(t, err, "error writing to rrd: %v", err)
+	})
 }
 
 func TestFlattenChannelData(t *testing.T) {
@@ -75,23 +93,22 @@ func TestFlattenChannelData(t *testing.T) {
 		assert.Equal(t, expected, actual)
 	})
 
-	//t.Run("returns a list of data grouped by value sorted by channel with fewer than expected channels", func(t *testing.T) {
-	//	data := SignalData{
-	//		4:  {"41", "42", "43", "44", "45", "46"},
-	//		6:  {"61", "62", "63", "64", "65", "66"},
-	//		13: {"131", "132", "133", "134", "135", "136"},
-	//		2:  {"21", "22", "23", "24", "25", "26"},
-	//	}
-	//	expected := []string{
-	//		"21", "41", "61", "131", "U", "U", "U", "U",
-	//		"22", "42", "62", "132", "U", "U", "U", "U",
-	//		"23", "43", "63", "133", "U", "U", "U", "U",
-	//		"24", "44", "64", "134", "U", "U", "U", "U",
-	//		"25", "45", "65", "135", "U", "U", "U", "U",
-	//		"26", "46", "66", "136", "U", "U", "U", "U",
-	//	}
-	//
-	//	actual := flattenChannelData(data)
-	//	assert.Equal(t, expected, actual)
-	//})
+	t.Run("returns a list of data grouped by value sorted by channel with fewer than expected channels", func(t *testing.T) {
+		data := SignalData{
+			4:  {"41", "42", "43", "44", "45"},
+			6:  {"61", "62", "63", "64", "65"},
+			13: {"131", "132", "133", "134", "135"},
+			2:  {"21", "22", "23", "24", "25"},
+		}
+		expected := []string{
+			"21", "41", "61", "131", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U",
+			"22", "42", "62", "132", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U",
+			"23", "43", "63", "133", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U",
+			"24", "44", "64", "134", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U",
+			"25", "45", "65", "135", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U", "U",
+		}
+
+		actual := flattenChannelData(data)
+		assert.Equal(t, expected, actual)
+	})
 }

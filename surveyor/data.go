@@ -143,6 +143,15 @@ func flattenChannelData(data SignalData) []string {
 		}
 	}
 
+	lenChannels := len(sortedChannelIDs)
+	for i := range totalChannels - lenChannels {
+		base := i + lenChannels
+		for j := range totalDataSources {
+			next := j * totalChannels
+			flattened[base+next] = "U"
+		}
+	}
+
 	return flattened
 }
 
