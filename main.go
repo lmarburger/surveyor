@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"log"
 	"net/http"
@@ -27,6 +28,10 @@ func main() {
 
 	f := parseFlags()
 
+	client := surveyor.NewHNAPClient()
+	thing := surveyor.NewSignalDataCollector(client, prometheus.DefaultRegisterer)
+	prometheus.MustRegister(thing)
+
 	http.Handle("/metrics", promhttp.Handler())
 	go func() {
 		log.Printf("server started at %s\n", f.metricsAddr)
@@ -41,13 +46,12 @@ func main() {
 	}
 
 	server := surveyor.StartGraphServer(f.graphsAddr, f.urlBase, f.dataPath)
-	client := surveyor.NewHNAPClient()
 	scrapeTicker := time.NewTicker(f.interval)
 	defer scrapeTicker.Stop()
 
 loop:
 	for {
-		run(ctx, client, f.dataPath)
+		run(ctx, client, thing, f.dataPath)
 
 		select {
 		case <-ctx.Done():
@@ -65,7 +69,7 @@ loop:
 	}
 }
 
-func run(ctx context.Context, client *surveyor.HNAPClient, filename string) {
+func run(ctx context.Context, client *surveyor.HNAPClient, thing surveyor.SignalDataCollector, filename string) {
 	// It takes just shy of 3s to get signal data from the modem.
 	scrapeCtx, scrapeCancel := context.WithTimeout(ctx, time.Second*5)
 	defer scrapeCancel()
@@ -75,10 +79,6 @@ func run(ctx context.Context, client *surveyor.HNAPClient, filename string) {
 	if err != nil {
 		log.Printf("error fetching signal data: %v", err)
 		return
-	}
-
-	if reportErr := surveyor.ReportSignalData(signalData); reportErr != nil {
-		log.Printf("error reporting data: %v", reportErr)
 	}
 
 	writeCtx, writeCancel := context.WithTimeout(ctx, time.Second*1)
