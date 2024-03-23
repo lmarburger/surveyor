@@ -140,14 +140,14 @@ func NewHNAPClient() *HNAPClient {
 	return &HNAPClient{client: client}
 }
 
-func (client *HNAPClient) GetSignalData(context.Context) (SignalData, error) {
+func (client *HNAPClient) GetSignalData(ctx context.Context) (SignalData, error) {
 	var resp GetCustomerStatusDownstreamChannelInfoResponse
 	var err error
 
-	resp, err = client.attemptGetSignalData()
+	resp, err = client.attemptGetSignalData(ctx)
 	if errors.Is(err, notFound) {
 		client.credentials = Credentials{}
-		resp, err = client.attemptGetSignalData()
+		resp, err = client.attemptGetSignalData(ctx)
 	}
 
 	if err != nil {
@@ -161,35 +161,35 @@ func (client *HNAPClient) GetSignalData(context.Context) (SignalData, error) {
 	return ChannelInfosToSignalData(resp.Downstream.Channels)
 }
 
-func (client *HNAPClient) attemptGetSignalData() (GetCustomerStatusDownstreamChannelInfoResponse, error) {
+func (client *HNAPClient) attemptGetSignalData(ctx context.Context) (GetCustomerStatusDownstreamChannelInfoResponse, error) {
 	if client.credentials.Empty() {
 		fmt.Println("credentials empty, logging in")
-		if err := client.Login(); err != nil {
+		if err := client.Login(ctx); err != nil {
 			return GetCustomerStatusDownstreamChannelInfoResponse{}, err
 		}
 	}
 
-	return client.RequestStreamInfos()
+	return client.RequestStreamInfos(ctx)
 }
 
-func (client *HNAPClient) Login() error {
-	challenge, err := client.GetChallenge(username)
+func (client *HNAPClient) Login(ctx context.Context) error {
+	challenge, err := client.GetChallenge(ctx, username)
 	if err != nil {
 		return err
 	}
 
 	client.credentials = NewCredentials(challenge, username, password)
 
-	if err := client.SubmitChallenge(); err != nil {
+	if err := client.SubmitChallenge(ctx); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (client *HNAPClient) GetChallenge(username string) (Challenge, error) {
+func (client *HNAPClient) GetChallenge(ctx context.Context, username string) (Challenge, error) {
 	request := NewLoginRequest("request", username, "")
-	body, err := client.MakeRequest(request, loginAction)
+	body, err := client.MakeRequest(ctx, request, loginAction)
 	if err != nil {
 		return Challenge{}, err
 	}
@@ -202,9 +202,9 @@ func (client *HNAPClient) GetChallenge(username string) (Challenge, error) {
 	return NewChallenge(loginResponse), nil
 }
 
-func (client *HNAPClient) SubmitChallenge() error {
+func (client *HNAPClient) SubmitChallenge(ctx context.Context) error {
 	request := NewLoginRequest("login", client.credentials.Username, client.credentials.Password)
-	_, err := client.MakeRequest(request, loginAction)
+	_, err := client.MakeRequest(ctx, request, loginAction)
 	if err != nil {
 		return err
 	}
@@ -212,8 +212,8 @@ func (client *HNAPClient) SubmitChallenge() error {
 	return nil
 }
 
-func (client *HNAPClient) RequestStreamInfos() (GetCustomerStatusDownstreamChannelInfoResponse, error) {
-	body, err := client.MakeRequest(GetMultipleHNAPs{}, getChannelInfoAction)
+func (client *HNAPClient) RequestStreamInfos(ctx context.Context) (GetCustomerStatusDownstreamChannelInfoResponse, error) {
+	body, err := client.MakeRequest(ctx, GetMultipleHNAPs{}, getChannelInfoAction)
 	if err != nil {
 		return GetCustomerStatusDownstreamChannelInfoResponse{}, err
 	}
@@ -226,13 +226,13 @@ func (client *HNAPClient) RequestStreamInfos() (GetCustomerStatusDownstreamChann
 	return response, nil
 }
 
-func (client *HNAPClient) MakeRequest(request any, action string) ([]byte, error) {
+func (client *HNAPClient) MakeRequest(ctx context.Context, request any, action string) ([]byte, error) {
 	payloadBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling json: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", hnapURL, bytes.NewBuffer(payloadBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", hnapURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
