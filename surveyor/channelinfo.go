@@ -17,6 +17,18 @@ type ModemStatus struct {
 	Uncorrectable int
 }
 
+const (
+	IDField = iota
+	LockStatusField
+	ModulationField
+	ChannelIDField
+	FrequencyField
+	PowerLevelField
+	SignalNoiseField
+	CorrectedField
+	UncorrectableField
+)
+
 // `1^Locked^QAM256^13^723000000^7^29^53513438^417213^|+|2^Locked^QAM256^1^651000000^7^31^2895843^340003^|+|3^Locked^QAM256^2^657000000^8^31^3946112^232351^`
 
 func ChannelInfosToSignalData(channels string) (SignalData, error) {
@@ -30,17 +42,47 @@ func ChannelInfosToSignalData(channels string) (SignalData, error) {
 			return nil, fmt.Errorf("invalid record, expected 9 fields, got %d: %q", len(fields), record)
 		}
 
-		channelID, err := strconv.Atoi(fields[3])
+		channelID, err := strconv.Atoi(fields[ChannelIDField])
 		if err != nil {
 			return nil, fmt.Errorf("error parsing channel id: %w", err)
 		}
 
+		frequency, err := strconv.Atoi(fields[FrequencyField])
+		if err != nil {
+			return nil, fmt.Errorf("error parsing frequency: %w", err)
+		}
+
+		snratio, err := strconv.Atoi(fields[SignalNoiseField])
+		if err != nil {
+			return nil, fmt.Errorf("error parsing snratio: %w", err)
+		}
+
+		powerLevel, err := strconv.Atoi(fields[PowerLevelField])
+		if err != nil {
+			return nil, fmt.Errorf("error parsing power level: %w", err)
+		}
+
+		correctable, err := strconv.Atoi(fields[CorrectedField])
+		if err != nil {
+			return nil, fmt.Errorf("error parsing correctable: %w", err)
+		}
+
+		uncorrectable, err := strconv.Atoi(fields[UncorrectableField])
+		if err != nil {
+			return nil, fmt.Errorf("error parsing uncorrectable: %w", err)
+		}
+
 		data[channelID] = SignalDatum{
-			Frequency:     fields[4],
-			SNRatio:       fields[6],
-			PowerLevel:    fields[5],
-			Correctable:   fields[7],
-			Uncorrectable: fields[8],
+			Frequency:      fields[FrequencyField],
+			SNRatio:        fields[SignalNoiseField],
+			PowerLevel:     fields[PowerLevelField],
+			Correctable:    fields[CorrectedField],
+			Uncorrectable:  fields[UncorrectableField],
+			IFrequency:     frequency,
+			ISNRatio:       snratio,
+			IPowerLevel:    powerLevel,
+			ICorrectable:   correctable,
+			IUncorrectable: uncorrectable,
 		}
 	}
 

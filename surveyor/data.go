@@ -17,7 +17,9 @@ var totalChannels = 16
 var totalDataSources = 5
 
 type SignalDatum struct {
-	Frequency, SNRatio, PowerLevel, Correctable, Uncorrectable string
+	// TODO: Remove strings after fully moved to prom
+	Frequency, SNRatio, PowerLevel, Correctable, Uncorrectable      string
+	IFrequency, ISNRatio, IPowerLevel, ICorrectable, IUncorrectable int
 }
 
 type SignalData map[int]SignalDatum
