@@ -13,12 +13,12 @@ var (
 	frequency     = prometheus.NewDesc("frequency", "Frequency of a channel", labels, nil)
 	snratio       = prometheus.NewDesc("snratio", "Signal / Noise ratio of a channel", labels, nil)
 	powerLevel    = prometheus.NewDesc("power_level", "Power level of a channel", labels, nil)
-	correctable   = prometheus.NewDesc("correctable", "Total number of correctable codewords", labels, nil)
-	uncorrectable = prometheus.NewDesc("uncorrectable", "Total number of uncorrectable codewords", labels, nil)
+	correctable   = prometheus.NewDesc("correctable_count", "Total number of correctable codewords", labels, nil)
+	uncorrectable = prometheus.NewDesc("uncorrectable_count", "Total number of uncorrectable codewords", labels, nil)
 
 	scrapeDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:    "scrape_duration_sec",
-		Help:    "Duration of scrape requests in seconds",
+		Name:    "hmac_collect_duration_seconds",
+		Help:    "Duration of HMAC data collection requests in seconds",
 		Buckets: prometheus.ExponentialBuckets(1, 1.25, 10),
 	})
 )
