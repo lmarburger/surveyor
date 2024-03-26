@@ -6,17 +6,7 @@ import (
 	"strings"
 )
 
-type ModemStatus struct {
-	Index         int
-	LockStatus    string
-	Modulation    string
-	Frequency     int
-	Power         int
-	SNRorMER      int
-	Corrected     int
-	Uncorrectable int
-}
-
+// `1^Locked^QAM256^13^723000000^7^29^53513438^417213^|+|2^Locked^QAM256^1^651000000^7^31^2895843^340003^|+|3^Locked^QAM256^2^657000000^8^31^3946112^232351^`
 const (
 	IDField = iota
 	LockStatusField
@@ -28,8 +18,6 @@ const (
 	CorrectedField
 	UncorrectableField
 )
-
-// `1^Locked^QAM256^13^723000000^7^29^53513438^417213^|+|2^Locked^QAM256^1^651000000^7^31^2895843^340003^|+|3^Locked^QAM256^2^657000000^8^31^3946112^232351^`
 
 func ChannelInfosToSignalData(channels string) (SignalData, error) {
 	data := make(SignalData)
@@ -73,16 +61,11 @@ func ChannelInfosToSignalData(channels string) (SignalData, error) {
 		}
 
 		data[channelID] = SignalDatum{
-			Frequency:      fields[FrequencyField],
-			SNRatio:        fields[SignalNoiseField],
-			PowerLevel:     fields[PowerLevelField],
-			Correctable:    fields[CorrectedField],
-			Uncorrectable:  fields[UncorrectableField],
-			IFrequency:     frequency,
-			ISNRatio:       snratio,
-			IPowerLevel:    powerLevel,
-			ICorrectable:   correctable,
-			IUncorrectable: uncorrectable,
+			Frequency:     frequency,
+			SNRatio:       snratio,
+			PowerLevel:    powerLevel,
+			Correctable:   correctable,
+			Uncorrectable: uncorrectable,
 		}
 	}
 

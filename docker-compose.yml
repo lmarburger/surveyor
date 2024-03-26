@@ -3,9 +3,6 @@ services:
   surveyor:
     container_name: surveyor
     build: .
-    volumes:
-      - ./data:/app/data
-      - ./static:/app/static
     ports:
       - "8080:8080"
     environment:
