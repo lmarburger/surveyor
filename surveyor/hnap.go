@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -293,4 +294,11 @@ func HNAPHeaders(action, privateKey, uid string, now time.Time) map[string]strin
 	}
 
 	return headers
+}
+
+func ClosePrintErr(body io.Closer) {
+	err := body.Close()
+	if err != nil {
+		log.Printf("error closing body: %v", err)
+	}
 }

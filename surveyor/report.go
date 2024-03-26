@@ -23,6 +23,12 @@ var (
 	})
 )
 
+type SignalDatum struct {
+	Frequency, SNRatio, PowerLevel, Correctable, Uncorrectable int
+}
+
+type SignalData map[int]SignalDatum
+
 type SignalDataCollector struct {
 	client *HNAPClient
 }
@@ -55,10 +61,10 @@ func (this SignalDataCollector) Collect(ch chan<- prometheus.Metric) {
 
 	for channel, datum := range data {
 		channelID := strconv.Itoa(channel)
-		ch <- prometheus.MustNewConstMetric(frequency, prometheus.GaugeValue, float64(datum.IFrequency), channelID)
-		ch <- prometheus.MustNewConstMetric(snratio, prometheus.GaugeValue, float64(datum.ISNRatio), channelID)
-		ch <- prometheus.MustNewConstMetric(powerLevel, prometheus.GaugeValue, float64(datum.IPowerLevel), channelID)
-		ch <- prometheus.MustNewConstMetric(correctable, prometheus.CounterValue, float64(datum.ICorrectable), channelID)
-		ch <- prometheus.MustNewConstMetric(uncorrectable, prometheus.CounterValue, float64(datum.IUncorrectable), channelID)
+		ch <- prometheus.MustNewConstMetric(frequency, prometheus.GaugeValue, float64(datum.Frequency), channelID)
+		ch <- prometheus.MustNewConstMetric(snratio, prometheus.GaugeValue, float64(datum.SNRatio), channelID)
+		ch <- prometheus.MustNewConstMetric(powerLevel, prometheus.GaugeValue, float64(datum.PowerLevel), channelID)
+		ch <- prometheus.MustNewConstMetric(correctable, prometheus.CounterValue, float64(datum.Correctable), channelID)
+		ch <- prometheus.MustNewConstMetric(uncorrectable, prometheus.CounterValue, float64(datum.Uncorrectable), channelID)
 	}
 }
