@@ -40,7 +40,7 @@ func main() {
 }
 
 func parseFlags() flags {
-	addr := flag.String("addr", ":8081", "Listen address for the metrics web server")
+	addr := flag.String("addr", ":8080", "Listen address for the metrics web server")
 	flag.Parse()
 
 	f := flags{addr: *addr}
