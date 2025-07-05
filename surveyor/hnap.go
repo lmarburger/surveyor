@@ -28,7 +28,7 @@ const (
 	getChannelInfoAction = `"http://purenetworks.com/HNAP1/GetMultipleHNAPs"`
 )
 
-var notFound = errors.New("not found")
+var errNotFound = errors.New("not found")
 
 type LoginRequest struct {
 	Login LoginRequestBody `json:"Login"`
@@ -146,7 +146,7 @@ func (client *HNAPClient) GetSignalData(ctx context.Context) (SignalData, error)
 	var err error
 
 	resp, err = client.attemptGetSignalData(ctx)
-	if errors.Is(err, notFound) {
+	if errors.Is(err, errNotFound) {
 		client.credentials = Credentials{}
 		resp, err = client.attemptGetSignalData(ctx)
 	}
@@ -250,7 +250,7 @@ func (client *HNAPClient) MakeRequest(ctx context.Context, request any, action s
 	defer ClosePrintErr(resp.Body)
 
 	if resp.StatusCode == 404 {
-		return nil, notFound
+		return nil, errNotFound
 	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("received http error status=%d: %s", resp.StatusCode, resp.Status)
