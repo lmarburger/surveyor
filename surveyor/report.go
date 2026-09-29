@@ -47,8 +47,8 @@ func (this SignalDataCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (this SignalDataCollector) Collect(ch chan<- prometheus.Metric) {
-	// It takes just shy of 3s to get signal data from the modem.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	// Fetch time scales with the number of bonded channels: ~2.5s at 16, ~5.5s at 32.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	start := time.Now()
