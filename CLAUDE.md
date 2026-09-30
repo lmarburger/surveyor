@@ -4,78 +4,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Surveyor is a Prometheus metrics exporter that collects signal statistics from Surfboard cable modems. It exposes cable modem signal quality metrics (SNR, power levels, error counts) as Prometheus metrics for monitoring and visualization.
+Surveyor is a Prometheus exporter for the signal statistics of an Arris SURFboard DOCSIS 3.1 cable modem (downstream SNR, power, codeword errors; upstream power). It runs inside the panorama stack (`../panorama`), which builds it from this checkout. See the README for configuration and the metric list.
 
 ## Architecture
 
-The codebase follows a clean Go architecture:
-- `main.go`: Entry point that sets up the HTTP server and Prometheus metrics endpoint
-- `surveyor/`: Core package containing:
-  - `hnap.go`: HNAP (Home Network Administration Protocol) client for modem authentication
-  - `channelinfo.go`: Parser for channel signal data from the modem
-  - `report.go`: Prometheus collector implementation that exposes metrics
+- `main.go`: configuration (flags plus `SURVEYOR_MODEM_*` env vars), signal handling, HTTP server
+- `surveyor/hnap.go`: HNAP client. HMAC-MD5 login, one bundled `GetMultipleHNAPs` request for downstream, upstream, and software info
+- `surveyor/channelinfo.go`: parsers for the `^`-delimited channel records
+- `surveyor/poller.go`: background loop that owns all modem traffic, with exponential backoff
+- `surveyor/collector.go`: Prometheus collector that only reads the poller's snapshot
 
-The application uses HNAP protocol with HMAC-MD5 authentication to securely communicate with cable modems and parse their signal data.
+The modem is never contacted from inside a scrape. That used to be the design, and it meant every reader of `/metrics` added modem load and a slow modem failed the scrape.
+
+## Modem Behavior
+
+Observed on the real modem, and reproduced by the fake in `surveyor/client_test.go`:
+
+- A wrong password gets **HTTP 200** with `"LoginResult": "FAILED"`. The body has to be checked.
+- Any request with a missing or expired session gets **HTTP 404**.
+- The downstream query is slow and scales with bonded channels: about 2.5s at 16 channels, 5.5s at 32. Upstream and software info add well under a second.
+- The modem keeps working on requests the client abandoned, and drops connections when two clients talk to it at once. Overlapping or rapid retries wedge its web server until a reboot.
+- `HNAP_AUTH` carries a millisecond timestamp, matching the web UI's `Date.now() % 2000000000000`.
 
 ## Development Commands
 
-### Build and Run
 ```bash
-# Run locally
-go run main.go
-
-# Build binary
-go build -o surveyor
-
-# Run with custom address
-go run main.go -addr :8080
-```
-
-### Testing
-```bash
-# Run all tests
-go test ./...
-
-# Run tests with verbose output
-go test -v ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Run tests for specific package
-go test -v ./surveyor/...
-```
-
-### Code Quality
-```bash
-# Format code
-go fmt ./...
-
-# Vet code for common mistakes
+SURVEYOR_MODEM_PASSWORD=... go run . -addr 127.0.0.1:18080   # against the real modem
+go test ./...                                                # includes a fake TLS modem
+go test -race ./...
 go vet ./...
-
-# Run staticcheck
-staticcheck ./...
+STATICCHECK_CACHE=/tmp/staticcheck staticcheck ./...         # default cache dir is not writable under the sandbox
 ```
 
-### Docker Development
-```bash
-# Build and run with docker-compose
-docker compose up --build
+Running locally while the stack is up means two pollers hit the modem. That is fine for a quick check, but use a long `-interval` and stop it when done.
 
-# Run in detached mode
-docker compose up -d
+## Deploying
 
-# Build Docker image directly
-docker build -t surveyor .
-```
-
-## Important Notes
-
-1. **Metrics Endpoint**: Prometheus metrics are exposed at `/metrics` on the configured port.
-
-2. **Target Device**: Default target is a Surfboard SB6141 modem at `https://192.168.100.1/HNAP1/`.
-
-3. **Dependencies**: Uses Go 1.22 with minimal external dependencies (Prometheus client, goquery for HTML parsing, testify for testing).
-
-4. **Testing**: Tests use testify assertions. Always run tests before committing changes to ensure the HNAP client and channel info parser work correctly.
+From `../panorama`: `scripts/stack build surveyor && scripts/stack up surveyor`, then `scripts/stack health`.
