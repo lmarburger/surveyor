@@ -11,24 +11,43 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Replace these constants with your actual endpoint and credentials
 const (
-	username = "admin"
-	password = "Google.com1"
-	hnapURL  = "https://192.168.100.1/HNAP1/"
+	DefaultURL      = "https://192.168.100.1/HNAP1/"
+	DefaultUsername = "admin"
 
-	loginAction          = `"http://purenetworks.com/HNAP1/Login"`
-	getChannelInfoAction = `"http://purenetworks.com/HNAP1/GetMultipleHNAPs"`
+	loginAction    = `"http://purenetworks.com/HNAP1/Login"`
+	multipleAction = `"http://purenetworks.com/HNAP1/GetMultipleHNAPs"`
+
+	resultOK = "OK"
 )
 
+const (
+	StageLogin = "login"
+	StageFetch = "fetch"
+	StageParse = "parse"
+)
+
+// The modem answers 404 to any request carrying a missing or expired session.
 var errNotFound = errors.New("not found")
+
+var ErrLoginFailed = errors.New("modem rejected login")
+
+// FetchError records which step of talking to the modem failed, so callers can
+// tell a bad password apart from a slow or unreachable modem.
+type FetchError struct {
+	Stage string
+	Err   error
+}
+
+func (e *FetchError) Error() string { return e.Stage + ": " + e.Err.Error() }
+func (e *FetchError) Unwrap() error { return e.Err }
 
 type LoginRequest struct {
 	Login LoginRequestBody `json:"Login"`
@@ -98,21 +117,15 @@ func (creds Credentials) Empty() bool {
 	return creds.UID == "" || creds.PrivateKey == ""
 }
 
-type GetMultipleHNAPs struct {
+type statusRequest struct {
 	Body struct {
-		GetCustomerStatusDownstreamChannelInfo string `json:"GetCustomerStatusDownstreamChannelInfo"`
-		//GetCustomerStatusUpstreamChannelInfo   string `json:"GetCustomerStatusUpstreamChannelInfo"`
+		Downstream string `json:"GetCustomerStatusDownstreamChannelInfo"`
+		Upstream   string `json:"GetCustomerStatusUpstreamChannelInfo"`
+		Software   string `json:"GetCustomerStatusSoftware"`
 	} `json:"GetMultipleHNAPs"`
 }
 
-type GetCustomerStatusDownstreamChannelInfoResponse struct {
-	Downstream struct {
-		Result   string `json:"GetCustomerStatusDownstreamChannelInfoResult"`
-		Channels string `json:"CustomerConnDownstreamChannel"`
-	} `json:"GetCustomerStatusDownstreamChannelInfoResponse"`
-}
-
-type GetMultipleHNAPsResponse struct {
+type statusResponse struct {
 	Body struct {
 		Result     string `json:"GetMultipleHNAPsResult"`
 		Downstream struct {
@@ -123,68 +136,140 @@ type GetMultipleHNAPsResponse struct {
 			Result   string `json:"GetCustomerStatusUpstreamChannelInfoResult"`
 			Channels string `json:"CustomerConnUpstreamChannel"`
 		} `json:"GetCustomerStatusUpstreamChannelInfoResponse"`
+		Software struct {
+			Result          string `json:"GetCustomerStatusSoftwareResult"`
+			SpecVersion     string `json:"StatusSoftwareSpecVer"`
+			HardwareVersion string `json:"StatusSoftwareHdVer"`
+			SoftwareVersion string `json:"StatusSoftwareSfVer"`
+		} `json:"GetCustomerStatusSoftwareResponse"`
 	} `json:"GetMultipleHNAPsResponse"`
 }
 
+type ModemInfo struct {
+	DOCSIS, Hardware, Firmware string
+}
+
+type Status struct {
+	Info       ModemInfo
+	Downstream []DownstreamChannel
+	Upstream   []UpstreamChannel
+	// Records the modem sent that could not be parsed and were left out.
+	SkippedDownstream, SkippedUpstream int
+}
+
+// HNAPClient is not safe for concurrent use. The modem copes badly with
+// overlapping requests anyway (it drops connections), so callers should
+// serialize access rather than share a client.
 type HNAPClient struct {
 	client      http.Client
+	url         string
+	username    string
+	password    string
 	credentials Credentials
+	now         func() time.Time
 }
 
-func NewHNAPClient() *HNAPClient {
-	client := http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+func NewHNAPClient(url, username, password string) *HNAPClient {
+	return &HNAPClient{
+		client: http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				MaxConnsPerHost: 1,
+			},
 		},
+		url:      url,
+		username: username,
+		password: password,
+		now:      time.Now,
 	}
-
-	return &HNAPClient{client: client}
 }
 
-func (client *HNAPClient) GetSignalData(ctx context.Context) (SignalData, error) {
-	var resp GetCustomerStatusDownstreamChannelInfoResponse
-	var err error
-
-	resp, err = client.attemptGetSignalData(ctx)
+// Fetch returns the modem's current channel status. On any failure the session
+// is discarded, so the next call starts from a fresh login instead of retrying
+// a session the modem may no longer honor.
+func (client *HNAPClient) Fetch(ctx context.Context) (Status, error) {
+	status, err := client.attemptFetch(ctx)
 	if errors.Is(err, errNotFound) {
+		slog.Info("modem session expired, logging in again")
 		client.credentials = Credentials{}
-		resp, err = client.attemptGetSignalData(ctx)
+		status, err = client.attemptFetch(ctx)
 	}
-
 	if err != nil {
-		return nil, err
+		client.credentials = Credentials{}
+		return Status{}, err
 	}
-
-	if resp.Downstream.Result != "OK" {
-		return nil, fmt.Errorf("error in downstream info, result=%q", resp.Downstream.Result)
-	}
-
-	return ChannelInfosToSignalData(resp.Downstream.Channels)
+	return status, nil
 }
 
-func (client *HNAPClient) attemptGetSignalData(ctx context.Context) (GetCustomerStatusDownstreamChannelInfoResponse, error) {
+func (client *HNAPClient) attemptFetch(ctx context.Context) (Status, error) {
 	if client.credentials.Empty() {
-		fmt.Println("credentials empty, logging in")
 		if err := client.Login(ctx); err != nil {
-			return GetCustomerStatusDownstreamChannelInfoResponse{}, err
+			return Status{}, &FetchError{Stage: StageLogin, Err: err}
 		}
 	}
 
-	return client.RequestStreamInfos(ctx)
+	body, err := client.MakeRequest(ctx, statusRequest{}, multipleAction)
+	if errors.Is(err, errNotFound) {
+		return Status{}, err
+	}
+	if err != nil {
+		return Status{}, &FetchError{Stage: StageFetch, Err: err}
+	}
+
+	status, err := parseStatus(body)
+	if err != nil {
+		return Status{}, &FetchError{Stage: StageParse, Err: err}
+	}
+	return status, nil
+}
+
+func parseStatus(body []byte) (Status, error) {
+	var resp statusResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return Status{}, fmt.Errorf("error unmarshalling json: %w", err)
+	}
+
+	r := resp.Body
+	if r.Result != resultOK {
+		return Status{}, fmt.Errorf("modem returned result=%q", r.Result)
+	}
+	if r.Downstream.Result != resultOK {
+		return Status{}, fmt.Errorf("modem returned downstream result=%q", r.Downstream.Result)
+	}
+
+	var status Status
+	status.Downstream, status.SkippedDownstream = ParseDownstream(r.Downstream.Channels)
+
+	// Upstream and software info are extras. A failure there should not throw
+	// away the downstream data, which is the main point of the exporter.
+	if r.Upstream.Result == resultOK {
+		status.Upstream, status.SkippedUpstream = ParseUpstream(r.Upstream.Channels)
+	}
+	if r.Software.Result == resultOK {
+		status.Info = ModemInfo{
+			DOCSIS:   r.Software.SpecVersion,
+			Hardware: r.Software.HardwareVersion,
+			Firmware: r.Software.SoftwareVersion,
+		}
+	}
+	return status, nil
 }
 
 func (client *HNAPClient) Login(ctx context.Context) error {
-	challenge, err := client.GetChallenge(ctx, username)
+	client.credentials = Credentials{}
+
+	challenge, err := client.GetChallenge(ctx, client.username)
 	if err != nil {
 		return err
 	}
 
-	client.credentials = NewCredentials(challenge, username, password)
-
-	if err := client.SubmitChallenge(ctx); err != nil {
+	creds := NewCredentials(challenge, client.username, client.password)
+	if err := client.SubmitChallenge(ctx, creds); err != nil {
 		return err
 	}
 
+	client.credentials = creds
+	slog.Info("logged in to modem")
 	return nil
 }
 
@@ -199,47 +284,49 @@ func (client *HNAPClient) GetChallenge(ctx context.Context, username string) (Ch
 	if err := json.Unmarshal(body, &loginResponse); err != nil {
 		return Challenge{}, fmt.Errorf("error unmarshalling json: %w", err)
 	}
+	if result := loginResponse.LoginResponse.LoginResult; result != resultOK {
+		return Challenge{}, fmt.Errorf("%w: challenge result=%q", ErrLoginFailed, result)
+	}
 
 	return NewChallenge(loginResponse), nil
 }
 
-func (client *HNAPClient) SubmitChallenge(ctx context.Context) error {
-	request := NewLoginRequest("login", client.credentials.Username, client.credentials.Password)
-	_, err := client.MakeRequest(ctx, request, loginAction)
+// SubmitChallenge sends the hashed password. The modem answers a wrong
+// password with HTTP 200 and LoginResult "FAILED", so the body must be checked.
+func (client *HNAPClient) SubmitChallenge(ctx context.Context, creds Credentials) error {
+	request := NewLoginRequest("login", creds.Username, creds.Password)
+	body, err := client.makeRequest(ctx, request, loginAction, creds)
 	if err != nil {
 		return err
 	}
 
+	var loginResponse LoginResponse
+	if err := json.Unmarshal(body, &loginResponse); err != nil {
+		return fmt.Errorf("error unmarshalling json: %w", err)
+	}
+	if result := loginResponse.LoginResponse.LoginResult; result != resultOK {
+		return fmt.Errorf("%w: result=%q", ErrLoginFailed, result)
+	}
 	return nil
 }
 
-func (client *HNAPClient) RequestStreamInfos(ctx context.Context) (GetCustomerStatusDownstreamChannelInfoResponse, error) {
-	body, err := client.MakeRequest(ctx, GetMultipleHNAPs{}, getChannelInfoAction)
-	if err != nil {
-		return GetCustomerStatusDownstreamChannelInfoResponse{}, err
-	}
-
-	var response GetCustomerStatusDownstreamChannelInfoResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return GetCustomerStatusDownstreamChannelInfoResponse{}, fmt.Errorf("error unmarshalling json: %w", err)
-	}
-
-	return response, nil
+func (client *HNAPClient) MakeRequest(ctx context.Context, request any, action string) ([]byte, error) {
+	return client.makeRequest(ctx, request, action, client.credentials)
 }
 
-func (client *HNAPClient) MakeRequest(ctx context.Context, request any, action string) ([]byte, error) {
+func (client *HNAPClient) makeRequest(ctx context.Context, request any, action string, creds Credentials) ([]byte, error) {
 	payloadBytes, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling json: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", hnapURL, bytes.NewBuffer(payloadBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", client.url, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
 	req.Header.Set("Accept", "application/json")
-	for key, value := range HNAPHeaders(action, client.credentials.PrivateKey, client.credentials.UID, time.Now()) {
+	for key, value := range HNAPHeaders(action, creds.PrivateKey, creds.UID, client.now()) {
 		req.Header.Set(key, value)
 	}
 
@@ -249,10 +336,10 @@ func (client *HNAPClient) MakeRequest(ctx context.Context, request any, action s
 	}
 	defer ClosePrintErr(resp.Body)
 
-	if resp.StatusCode == 404 {
+	if resp.StatusCode == http.StatusNotFound {
 		return nil, errNotFound
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("received http error status=%d: %s", resp.StatusCode, resp.Status)
 	}
 
@@ -278,8 +365,8 @@ func HNAPHeaders(action, privateKey, uid string, now time.Time) map[string]strin
 		privateKey = "withoutloginkey"
 	}
 
-	// Can't wait to see if this code works after May 2033
-	currentTimeMS := now.Unix() % 2_000_000_000_000
+	// Mirrors the modem's own web UI: `Date.now() % 2000000000000`.
+	currentTimeMS := now.UnixMilli() % 2_000_000_000_000
 	message := strconv.FormatInt(currentTimeMS, 10) + action
 
 	encoded := CalculateHMAC(message, privateKey)
@@ -299,6 +386,6 @@ func HNAPHeaders(action, privateKey, uid string, now time.Time) map[string]strin
 func ClosePrintErr(body io.Closer) {
 	err := body.Close()
 	if err != nil {
-		log.Printf("error closing body: %v", err)
+		slog.Warn("error closing body", "err", err)
 	}
 }

@@ -22,7 +22,7 @@ func TestHNAPHeaders(t *testing.T) {
 		now := time.Unix(1710688116, 0)
 		expected := map[string]string{
 			"SOAPACTION": action,
-			"HNAP_AUTH":  "8DD28DA21F6114D5E4DE5C0C4909A1C5 1710688116",
+			"HNAP_AUTH":  "002C6C2F01BDE2AF69BE90C5642C36F0 1710688116000",
 			"Cookie":     "Secure; Secure; uid=abc123; PrivateKey=supersecret",
 		}
 
@@ -36,7 +36,7 @@ func TestHNAPHeaders(t *testing.T) {
 		now := time.Unix(1710688116, 0)
 		expected := map[string]string{
 			"SOAPACTION": action,
-			"HNAP_AUTH":  "8DD28DA21F6114D5E4DE5C0C4909A1C5 1710688116",
+			"HNAP_AUTH":  "002C6C2F01BDE2AF69BE90C5642C36F0 1710688116000",
 		}
 
 		headers := HNAPHeaders(action, key, "", now)
@@ -48,7 +48,7 @@ func TestHNAPHeaders(t *testing.T) {
 		now := time.Unix(1710688116, 0)
 		expected := map[string]string{
 			"SOAPACTION": action,
-			"HNAP_AUTH":  "A00C07EC02491457ECDB82E012F2B083 1710688116",
+			"HNAP_AUTH":  "D1A18D31C5E30D02E72C75CD5B9E5C14 1710688116000",
 		}
 
 		headers := HNAPHeaders(action, "", "", now)
