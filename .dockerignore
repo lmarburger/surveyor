@@ -1,0 +1,8 @@
+.git
+.gitignore
+.dockerignore
+Dockerfile
+backups
+bin
+screenshot.png
+*.md

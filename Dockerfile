@@ -1,6 +1,8 @@
 FROM golang:1.27-trixie AS builder
 WORKDIR /app
-ADD . /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
 
 # Append a suffix to prevent colliding with the directory of the same name
 RUN go build -o surveyor-build
