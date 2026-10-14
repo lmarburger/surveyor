@@ -98,7 +98,7 @@ func parseConfig(args []string, getenv func(string) string) (config, error) {
 		"Modem admin username (env SURVEYOR_MODEM_USERNAME)")
 	fs.DurationVar(&cfg.interval, "interval", 30*time.Second, "Time between modem polls")
 	fs.DurationVar(&cfg.timeout, "timeout", 15*time.Second, "Deadline for one poll, including login")
-	fs.DurationVar(&cfg.maxBackoff, "max-backoff", 5*time.Minute, "Longest wait between polls while the modem is failing")
+	fs.DurationVar(&cfg.maxBackoff, "max-backoff", 30*time.Second, "Longest wait between polls while the modem is failing")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "Usage: surveyor [flags]")
 		fmt.Fprintln(fs.Output(), "The modem password is read from SURVEYOR_MODEM_PASSWORD.")
@@ -111,11 +111,8 @@ func parseConfig(args []string, getenv func(string) string) (config, error) {
 	if cfg.password == "" {
 		return config{}, errors.New("SURVEYOR_MODEM_PASSWORD is not set")
 	}
-	if cfg.interval <= 0 || cfg.timeout <= 0 {
-		return config{}, errors.New("-interval and -timeout must be positive")
-	}
-	if cfg.maxBackoff < cfg.interval {
-		return config{}, fmt.Errorf("-max-backoff (%s) must be at least -interval (%s)", cfg.maxBackoff, cfg.interval)
+	if cfg.interval <= 0 || cfg.timeout <= 0 || cfg.maxBackoff <= 0 {
+		return config{}, errors.New("-interval, -timeout, and -max-backoff must be positive")
 	}
 	return cfg, nil
 }

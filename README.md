@@ -29,10 +29,11 @@ curl localhost:8080/metrics
 | `-addr` | `:8080` | Listen address for `/metrics` |
 | `-interval` | `30s` | Time between modem polls |
 | `-timeout` | `15s` | Deadline for one poll, including login |
-| `-max-backoff` | `5m` | Longest wait between polls while the modem is failing |
+| `-max-backoff` | `30s` | Longest wait between polls while the modem is failing |
 
-Polls back off exponentially while the modem is failing. The modem keeps working on requests the client
-has given up on, so retrying at the normal rate only deepens its backlog.
+Only one request to the modem is in flight at a time, so retries never overlap; overlapping requests are what
+wedge its web server. While the modem is failing, the wait between polls doubles up to `-max-backoff`. With the
+default of `30s`, which equals the interval, a failing modem is simply retried at the normal rate.
 
 ## Metrics
 

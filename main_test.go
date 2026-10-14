@@ -40,8 +40,15 @@ func TestParseConfig(t *testing.T) {
 		assert.ErrorContains(t, err, "SURVEYOR_MODEM_PASSWORD")
 	})
 
-	t.Run("rejects a max backoff shorter than the interval", func(t *testing.T) {
-		_, err := parseConfig([]string{"-interval", "1m", "-max-backoff", "30s"},
+	t.Run("accepts a max backoff shorter than the interval", func(t *testing.T) {
+		cfg, err := parseConfig([]string{"-interval", "1m", "-max-backoff", "10s"},
+			env(map[string]string{"SURVEYOR_MODEM_PASSWORD": "hunter2"}))
+		require.NoError(t, err)
+		assert.Equal(t, 10*time.Second, cfg.maxBackoff)
+	})
+
+	t.Run("rejects a non-positive max backoff", func(t *testing.T) {
+		_, err := parseConfig([]string{"-max-backoff", "0s"},
 			env(map[string]string{"SURVEYOR_MODEM_PASSWORD": "hunter2"}))
 		assert.ErrorContains(t, err, "max-backoff")
 	})

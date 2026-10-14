@@ -55,6 +55,12 @@ func TestBackoff(t *testing.T) {
 	} {
 		assert.Equal(t, expected, backoff(30*time.Second, 5*time.Minute, failures), "failures=%d", failures)
 	}
+
+	t.Run("max below the interval retries failures sooner", func(t *testing.T) {
+		assert.Equal(t, time.Minute, backoff(time.Minute, 10*time.Second, 0))
+		assert.Equal(t, 10*time.Second, backoff(time.Minute, 10*time.Second, 1))
+		assert.Equal(t, 10*time.Second, backoff(time.Minute, 10*time.Second, 5))
+	})
 }
 
 func TestPoller_Poll(t *testing.T) {

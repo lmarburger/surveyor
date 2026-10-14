@@ -170,10 +170,12 @@ func (p *Poller) nextDelay() time.Duration {
 	return backoff(p.config.Interval, p.config.MaxBackoff, p.Snapshot().ConsecutiveFailures)
 }
 
-// backoff doubles the wait for each consecutive failure, capped at max. The
-// modem keeps working on requests the client has given up on, so retrying at
-// the normal rate while it is struggling only deepens the backlog.
+// backoff doubles the wait for each consecutive failure, capped at max. A max
+// below the interval means failures are retried sooner than normal polls.
 func backoff(interval, max time.Duration, failures int) time.Duration {
+	if failures == 0 {
+		return interval
+	}
 	delay := interval
 	for i := 1; i < failures && delay < max; i++ {
 		delay *= 2
